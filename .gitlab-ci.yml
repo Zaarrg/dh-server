@@ -1,0 +1,110 @@
+# use Eclipse's JDK
+# The ci should always use a unix(-like) OS to work
+image: eclipse-temurin:21
+
+# all stages need to be defined here
+# TODO: Make stages depend on what is in versionProperties
+stages:
+  - build
+  - api
+  - pages
+
+variables:
+  # Pull core when building
+  GIT_SUBMODULE_STRATEGY: recursive
+
+
+# These can be extended so code is a bit less duplicated
+.build_java:
+  #image: eclipse-temurin:17
+  cache:
+    key: "gradleCache_$CI_JOB_NAME_SLUG"
+    policy: pull-push
+    paths:
+      - .gradle
+      - cache/
+  allow_failure: true
+  retry:
+      max: 2
+      when:
+          - runner_system_failure
+          - stuck_or_timeout_failure
+
+
+build:
+  stage: build
+  parallel:
+    matrix:
+      - MC_VER: ["1.16.5", "1.17.1", "1.18.2", "1.19.2", "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6"]
+  script:
+    # this both runs the unit tests and assembles the code
+    - ./gradlew clean -PmcVer="${MC_VER}" -PinfoGitCommit="${CI_COMMIT_SHA}" -PinfoGitBranch="${CI_COMMIT_BRANCH}" -PinfoBuildSource="GitLab CI (${CI_PIPELINE_ID})" --gradle-user-home cache/;
+    - ./gradlew build -PmcVer="${MC_VER}" -PinfoGitCommit="${CI_COMMIT_SHA}" -PinfoGitBranch="${CI_COMMIT_BRANCH}" -PinfoBuildSource="GitLab CI (${CI_PIPELINE_ID})" --gradle-user-home cache/;
+    - ./gradlew mergeJars -PmcVer="${MC_VER}" -PinfoGitCommit="${CI_COMMIT_SHA}" -PinfoGitBranch="${CI_COMMIT_BRANCH}" -PinfoBuildSource="GitLab CI (${CI_PIPELINE_ID})" --gradle-user-home cache/;
+  artifacts:
+    name: "NightlyBuild_${MC_VER}-${CI_COMMIT_SHORT_SHA}-${CI_COMMIT_TIMESTAMP}"
+    paths:
+      - Merged/*.jar
+      - quilt/build/libs/*.jar
+      - fabric/build/libs/*.jar
+      - forge/build/libs/*.jar
+      - neoforge/build/libs/*.jar
+    exclude:
+      # TODO: There is a lot of duplicate stuff here, try to maybe make it smaller
+      - fabric/build/libs/*-all.jar
+      - fabric/build/libs/*-dev.jar
+      - fabric/build/libs/*-sources.jar
+      - quilt/build/libs/*-all.jar
+      - quilt/build/libs/*-dev.jar
+      - quilt/build/libs/*-sources.jar
+      - forge/build/libs/*-all.jar
+      - forge/build/libs/*-dev.jar
+      - forge/build/libs/*-sources.jar
+      - neoforge/build/libs/*-all.jar
+      - neoforge/build/libs/*-dev.jar
+      - neoforge/build/libs/*-sources.jar
+    expire_in: 14 days
+    when: always
+  extends: .build_java
+
+
+.api:
+  stage: api
+  needs: []
+  script:
+    # this should only run for the API
+    - ./gradlew api:clean --gradle-user-home cache/;
+    # this also runs unit tests
+    - ./gradlew api:build --gradle-user-home cache/;
+    - ./gradlew api:addSourcesToCompiledJar --gradle-user-home cache/;
+  artifacts:
+    name: "Api_NightlyBuild-${CI_COMMIT_SHORT_SHA}-${CI_COMMIT_TIMESTAMP}"
+    paths:
+      - coreSubProjects/api/build/libs/merged/*.jar
+      # can be uncommented if we don't want a jar with the source code
+      # - coreSubProjects/api/build/libs/*.jar
+    exclude:
+      - coreSubProjects/api/build/libs/merged/*-all.jar
+      - coreSubProjects/api/build/libs/merged/*-sources.jar
+    expire_in: 1 day
+    when: always
+  extends: .build_java
+
+
+# generate and publish API javadocs
+.pages:
+  stage: pages
+  needs: []
+  script:
+    # this should only run for the API
+    - ./gradlew api:clean --gradle-user-home cache/;
+    # this also runs unit tests
+    - ./gradlew api:build --gradle-user-home cache/;
+    - ./gradlew api:javadoc --gradle-user-home cache/;
+    - mkdir public
+    - cp -r $CI_PROJECT_DIR/coreSubProjects/api/build/docs/javadoc/. public
+  artifacts:
+    paths:
+      - public
+  allow_failure: false
+  extends: .build_java

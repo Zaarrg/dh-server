@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Fabric Client &amp; Server - 1.19.4" type="CompoundRunConfigurationType" folderName="Fabric Client-Server">
+    <toRun name="Fabric 1.19.4 - Client" type="GradleRunConfiguration" />
+    <toRun name="Fabric 1.19.4 - Server" type="GradleRunConfiguration" />
+    <method v="2" />
+  </configuration>
+</component>

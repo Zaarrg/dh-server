@@ -1,0 +1,160 @@
+plugins {
+    id "fabric-loom" version "1.6-SNAPSHOT"
+}
+
+loom {
+    accessWidenerPath = project(":common").file("src/main/resources/${accessWidenerVersion}.distanthorizons.accesswidener")
+    
+    // Custom logging
+    log4jConfigs.from(file("log4j-dev.xml"))
+    
+    // "runs" isn't required, but when we do need it then it can be useful
+    runs {
+        client {
+            client()
+            setConfigName("Fabric Client")
+            ideConfigGenerated(true)
+            runDir("../run/client")
+        }
+        server {
+            server()
+            setConfigName("Fabric Server")
+            ideConfigGenerated(true)
+            runDir("../run/server")
+        }
+    }
+}
+
+remapJar {
+    inputFile = shadowJar.archiveFile
+    dependsOn shadowJar
+}
+
+
+configurations {
+    // The addModJar basically embeds the mod to the built jar
+    addModJar
+    include.extendsFrom addModJar
+    modImplementation.extendsFrom addModJar
+}
+    
+    
+
+def addMod(path, enabled) {
+    if (enabled == "2")
+        dependencies { modImplementation(path) }
+    else if (enabled == "1")
+        dependencies { modCompileOnly(path) }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
+    mappings loom.layered() {
+        // Mojmap mappings
+        officialMojangMappings()
+        // Parchment mappings (it adds parameter mappings & javadoc)
+        parchment("org.parchmentmc.data:parchment-${rootProject.parchment_version}@zip")
+    }
+    // Fabric loader
+    modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+
+
+//    annotationProcessor "javax.annotation:javax.annotation-api:1.3.2"
+//    implementation("javax.annotation:javax.annotation-api:1.3.2")
+//    runtimeOnly "javax.annotation:javax.annotation-api:1.3.2"
+//    compileOnly "javax.annotation:javax.annotation-api:1.3.2"
+//    modImplementation "javax.annotation:javax.annotation-api:1.3.2"
+    
+    // Fabric API
+    addModJar(fabricApi.module("fabric-api-base", rootProject.fabric_api_version))
+    addModJar(fabricApi.module("fabric-lifecycle-events-v1", rootProject.fabric_api_version))
+    addModJar(fabricApi.module("fabric-resource-loader-v0", rootProject.fabric_api_version))
+    addModJar(fabricApi.module("fabric-events-interaction-v0", rootProject.fabric_api_version))
+    addModJar(fabricApi.module("fabric-rendering-v1", rootProject.fabric_api_version)) // TODO: Remove this as it is only needed in 1 line (FabricClientProxy)
+    addModJar(fabricApi.module("fabric-networking-api-v1", rootProject.fabric_api_version))
+    addModJar(fabricApi.module("fabric-entity-events-v1", rootProject.fabric_api_version))
+    if (minecraft_version >= "1.19.2")
+        addModJar(fabricApi.module("fabric-command-api-v2", rootProject.fabric_api_version))
+    else // < 1.19.2
+        addModJar(fabricApi.module("fabric-command-api-v1", rootProject.fabric_api_version))
+    
+    // used by mod menu in MC 1.20.6+
+    addModJar(fabricApi.module("fabric-screen-api-v1", rootProject.fabric_api_version))
+    addModJar(fabricApi.module("fabric-key-binding-api-v1", rootProject.fabric_api_version))
+
+
+    // Mod Menu
+    modImplementation("com.terraformersmc:modmenu:${rootProject.modmenu_version}")
+
+    // Starlight
+    addMod("curse.maven:starlight-521783:${rootProject.starlight_version_fabric}", rootProject.enable_starlight)
+
+    // Phosphor
+    addMod("curse.maven:phosphor-372124:${rootProject.phosphor_version_fabric}", rootProject.enable_phosphor)
+
+    // Sodium
+    addMod("maven.modrinth:sodium:${rootProject.sodium_version}", rootProject.enable_sodium)
+    if (rootProject.enable_sodium == "2") {
+        implementation "org.joml:joml:1.10.2"
+        modImplementation(fabricApi.module("fabric-rendering-data-attachment-v1", rootProject.fabric_api_version))
+        modImplementation(fabricApi.module("fabric-rendering-fluids-v1", rootProject.fabric_api_version))
+    }
+    
+	// Lithium
+    addMod("maven.modrinth:lithium:${rootProject.lithium_version}", rootProject.enable_lithium)
+    
+    // Iris
+    addMod("maven.modrinth:iris:${rootProject.iris_version}", rootProject.enable_iris)
+    
+    // BCLib
+    addMod("com.github.quiqueck:BCLib:${rootProject.bclib_version}", rootProject.enable_bclib)
+    
+    // Canvas
+    addMod("io.vram:canvas-fabric-${project.canvas_version}", rootProject.enable_canvas)
+    
+    // Immersive Portals
+    if (rootProject.enable_immersive_portals == "1") {
+        modCompileOnly("com.github.iPortalTeam.ImmersivePortalsMod:imm_ptl_core:${project.immersive_portals_version}")
+    }
+    else if (rootProject.enable_immersive_portals == "2") {
+        modImplementation ("com.github.iPortalTeam.ImmersivePortalsMod:imm_ptl_core:${project.immersive_portals_version}") {
+            exclude(group: "net.fabricmc.fabric-api")
+            transitive(false)
+        }
+        modImplementation ("com.github.iPortalTeam.ImmersivePortalsMod:q_misc_util:${project.immersive_portals_version}") {
+            exclude(group: "net.fabricmc.fabric-api")
+            transitive(false)
+        }
+        modImplementation ("com.github.iPortalTeam.ImmersivePortalsMod:build:${project.immersive_portals_version}") {
+            exclude(group: "net.fabricmc.fabric-api")
+            transitive(false)
+        }
+        modImplementation("net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}")
+        api("com.github.LlamaLad7:MixinExtras:0.2.0-beta.4")
+        annotationProcessor("com.github.LlamaLad7:MixinExtras:0.2.0-beta.4")
+    }
+}
+
+
+task deleteResources(type: Delete) {
+    delete file("build/resources/main")
+}
+
+processResources {
+    dependsOn(copyCoreResources)
+    dependsOn(copyCommonLoaderResources)
+}
+
+runClient {
+    dependsOn(copyCoreResources)
+    dependsOn(copyCommonLoaderResources)
+//    jvmArgs([ "-XX:-OmitStackTraceInFastThrow", minecraftMemoryJavaArg ])
+    finalizedBy(deleteResources)
+}
+
+
+sourcesJar {
+    def commonSources = project(":common").sourcesJar
+    dependsOn commonSources
+    from commonSources.archiveFile.map { zipTree(it) }
+}
