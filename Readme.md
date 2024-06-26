@@ -1,5 +1,7 @@
 # Server-side support DH fork 1.21
 
+**Official repo got updated download from there: [Download](https://gitlab.com/s809/minecraft-lod-mod/-/pipelines/1349508836/builds)**
+
 This is a work-in-progress, don't expect it to work correctly! Especially 1.21
 
 "Open to LAN" servers don't work yet, use a dedicated server instead.
